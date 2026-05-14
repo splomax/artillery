@@ -2,6 +2,7 @@ import { CANVAS, TURN } from './config.js';
 import { drawScene } from './render.js';
 import { wireInputs, updateHUD } from './input.js';
 import { createGame, simulate, applyShotResult, animateShot, tickExplosion, checkGameOver, cpuTakeTurn } from './game.js';
+import { playWin, playLose } from './sound.js';
 
 const canvas = document.getElementById('game');
 canvas.width = CANVAS.width;
@@ -11,12 +12,36 @@ const ctx = canvas.getContext('2d');
 let state = null;
 let ui = null;
 
+const endOverlay = document.getElementById('endOverlay');
+const endText = document.getElementById('endText');
+const endNewGameBtn = document.getElementById('endNewGame');
+let endAnnounced = false;
+
 function newGame(difficulty) {
   state = createGame(difficulty);
   state.phase = 'PLAYER_AIM';
   ui.setControlsEnabled(true);
   ui.syncFromPlayer(state.player);
+  endAnnounced = false;
+  endOverlay.classList.add('hidden');
+  endText.classList.remove('win', 'lose');
+  endText.textContent = '';
 }
+
+function announceEnd() {
+  if (endAnnounced) return;
+  endAnnounced = true;
+  const win = state.winner === 'player';
+  endText.textContent = win ? 'You win!' : state.winner === 'cpu' ? 'You lose!' : 'Draw';
+  endText.classList.toggle('win', win);
+  endText.classList.toggle('lose', !win);
+  endOverlay.classList.remove('hidden');
+  if (win) playWin(); else playLose();
+}
+
+endNewGameBtn.addEventListener('click', () => {
+  newGame(ui.getDifficulty());
+});
 
 function playerFire({ angle, velocity }) {
   if (!state || state.phase !== 'PLAYER_AIM') return;
@@ -64,6 +89,7 @@ function frame(now) {
     tickExplosion(state, dt);
     drawScene(ctx, state);
     updateHUD(state);
+    if (state.phase === 'GAME_OVER') announceEnd();
   }
   requestAnimationFrame(frame);
 }

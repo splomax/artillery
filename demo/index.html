@@ -21,7 +21,13 @@
     <div id="turnIndicator" class="turn">Your turn</div>
   </div>
 
-  <canvas id="game"></canvas>
+  <div class="canvas-wrap">
+    <canvas id="game"></canvas>
+    <div id="endOverlay" class="end-overlay hidden">
+      <div id="endText" class="end-text"></div>
+      <button id="endNewGame" class="end-btn">New game</button>
+    </div>
+  </div>
 
   <div class="controls">
     <div class="hint">← / → angle &nbsp; ↑ / ↓ velocity &nbsp; Space fires</div>

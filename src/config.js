@@ -38,7 +38,8 @@ export const CANNON = {
 
 export const PROJECTILE = {
   radius: 3,
-  blastRadius: 28,                 // terrain carve radius AND explosion visual radius
+  blastRadius: 28,                 // terrain carve radius on a clean ground hit
+  cannonHitBlastRadius: 24,        // smaller carve when shell hits a cannon (cannon absorbs blast)
   directHitDamage: 50,             // damage applied on direct cannon hit
 };
 
@@ -56,10 +57,12 @@ export const INPUT_LIMITS = {
 //   memoryDepth:         how many past shots feed into the next aim
 //   initialGuessQuality: 0..1, how close the opening shot is to a sensible guess
 //   noiseFloor:          aimNoise will not shrink below this
+// aimNoise / noiseFloor are velocity-units (px/s) for the correction step; angle noise is
+// derived from aimNoise inside ai.js. learnRate multiplies the noise after each miss.
 export const AI_DIFFICULTY = {
-  easy:   { algorithm: 'bracket', aimNoise: 60, learnRate: 0.15, memoryDepth: 1, initialGuessQuality: 0.30, noiseFloor: 25 },
-  medium: { algorithm: 'bracket', aimNoise: 30, learnRate: 0.40, memoryDepth: 2, initialGuessQuality: 0.60, noiseFloor: 10 },
-  hard:   { algorithm: 'physics', aimNoise: 3.0, learnRate: 0.55, memoryDepth: 3, initialGuessQuality: 0.90, noiseFloor: 0.4 },
+  easy:   { algorithm: 'scaled',  aimNoise: 55, learnRate: 0.18, initialGuessQuality: 0.30, noiseFloor: 22 },
+  medium: { algorithm: 'scaled',  aimNoise: 22, learnRate: 0.45, initialGuessQuality: 0.65, noiseFloor: 6  },
+  hard:   { algorithm: 'physics', aimNoise: 7,  learnRate: 0.60, initialGuessQuality: 0.95, noiseFloor: 1  },
 };
 
 export const TURN = {

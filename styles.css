@@ -69,3 +69,36 @@ button:disabled { background: #555; cursor: not-allowed; }
 button#newGameBtn { background: #555; }
 select { background: #2a2a30; color: #eee; border: 1px solid #444; padding: 4px; border-radius: 3px; }
 .hint { font-size: 12px; opacity: 0.65; margin-left: auto; }
+
+.canvas-wrap { position: relative; width: 1000px; }
+.end-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(10, 10, 14, 0.55);
+  border-radius: 4px;
+  pointer-events: auto;
+  animation: fadein 0.35s ease;
+}
+.end-overlay.hidden { display: none; }
+.end-text {
+  font-size: 72px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  padding: 24px 56px;
+  border-radius: 12px;
+  border: 4px solid #fff;
+  background: rgba(0, 0, 0, 0.6);
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.end-text.win  { color: #ffd66b; border-color: #ffd66b; }
+.end-text.lose { color: #ff7777; border-color: #ff7777; }
+.end-btn {
+  font-size: 18px;
+  padding: 10px 22px;
+}
+@keyframes fadein { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }

@@ -1,136 +1,127 @@
-import { AI_DIFFICULTY, INPUT_LIMITS, PHYSICS, CANVAS } from './config.js';
+import { AI_DIFFICULTY, INPUT_LIMITS, PHYSICS } from './config.js';
 
-// Each AI keeps a small memory object across shots in a match.
+// Memory tracked across a match per AI.
 export function createAIMemory(difficulty) {
   const cfg = AI_DIFFICULTY[difficulty];
   return {
     difficulty,
-    cfg: { ...cfg },                 // copy so per-match noise shrinkage doesn't mutate the global
+    cfg: { ...cfg },
     currentNoise: cfg.aimNoise,
-    minVel: INPUT_LIMITS.velMin,
-    maxVel: INPUT_LIMITS.velMax,
-    history: [],                     // { angle, velocity, impactX, sign } sign: -1 short, +1 long, 0 hit
+    lastShot: null,            // { angle, velocity, impactX }
     firstShot: true,
+    preferHighArc: false,
   };
 }
 
-// Choose a shot. Returns { angle, velocity } in human-input units.
+// Choose a shot. Returns { angle, velocity }.
 export function chooseShot(memory, self, enemy) {
-  if (memory.cfg.algorithm === 'physics') return chooseShotPhysics(memory, self, enemy);
-  return chooseShotBracket(memory, self, enemy);
+  if (memory.firstShot) return openingShot(memory, self, enemy);
+  return correctedShot(memory, self, enemy);
 }
 
-function chooseShotBracket(memory, self, enemy) {
+function openingShot(memory, self, enemy) {
   const dx = enemy.x - self.x;
+  const dy = enemy.y - self.y;
   const absDx = Math.abs(dx);
+  const q = memory.cfg.initialGuessQuality;
 
-  // Angle: bracketing AIs use a coarse default per side, shifted by initial guess quality.
-  const idealAngle = 45;
-  const angleSpread = (1 - memory.cfg.initialGuessQuality) * 25;
-  const angle = clampAngle(idealAngle + gaussian() * angleSpread);
-
-  // Velocity: midpoint of current bracket + noise. On first shot, base on rough range.
-  let velocity;
-  if (memory.firstShot) {
-    const roughGuess = roughVelocityForRange(absDx, angle);
-    const spread = (1 - memory.cfg.initialGuessQuality) * (INPUT_LIMITS.velMax - INPUT_LIMITS.velMin) * 0.5;
-    velocity = clampVel(roughGuess + gaussian() * spread);
-  } else {
-    const mid = (memory.minVel + memory.maxVel) / 2;
-    velocity = clampVel(mid + gaussian() * memory.currentNoise);
+  if (memory.cfg.algorithm === 'physics') {
+    // Pick a sensible velocity and solve angle exactly, then add small noise.
+    const speedBase = clampVel(roughVelocityForRange(absDx, 45));
+    const speed = clampVel(speedBase + gaussian() * (1 - q) * 40);
+    const angle = solveAngle(absDx, dy, speed, memory.preferHighArc);
+    return {
+      angle: clampAngle(angle + gaussian() * memory.cfg.aimNoise * 0.3),
+      velocity: speed,
+    };
   }
+
+  // bracket / scaled algorithms: open with rough estimate at 45°.
+  const angle = clampAngle(45 + gaussian() * (1 - q) * 12);
+  const rough = roughVelocityForRange(absDx, angle);
+  const spread = (1 - q) * (INPUT_LIMITS.velMax - INPUT_LIMITS.velMin) * 0.25;
+  const velocity = clampVel(rough + gaussian() * spread);
   return { angle, velocity };
 }
 
-function chooseShotPhysics(memory, self, enemy) {
-  // Pick a sensible velocity (mid-range, slightly randomised) then solve for angle.
-  // If terrain blocks low arc, the resolve step will tell us and we can switch high arc next time.
-  const speedBase = (INPUT_LIMITS.velMin + INPUT_LIMITS.velMax) / 2;
-  const speed = clampVel(speedBase + (Math.random() - 0.5) * 30);
-  const dxWorld = enemy.x - self.x;
-  const dyWorld = enemy.y - self.y;
-  const g = PHYSICS.gravity;
+function correctedShot(memory, self, enemy) {
+  const last = memory.lastShot;
+  const dx = enemy.x - self.x;
+  const dy = enemy.y - self.y;
+  const absTargetDx = Math.abs(dx);
+  const lastImpactDx = last.impactX - self.x;
 
-  // Solve for launch angle (relative to horizontal toward enemy).
-  // Equation: tan(theta) = (v^2 +/- sqrt(v^4 - g*(g*x^2 + 2*y*v^2))) / (g*x)
-  // Coordinate note: canvas y grows downward. We treat "up" as -y, so a positive shot height
-  // means dy_up = -dyWorld. Use up-positive frame for the solver.
-  const x = Math.abs(dxWorld);
-  const yUp = -dyWorld;
-  const v2 = speed * speed;
-  const disc = v2 * v2 - g * (g * x * x + 2 * yUp * v2);
-  let degAngle;
-  if (disc < 0) {
-    // Out of range at this speed; aim maximum and let the bracket take over.
-    degAngle = 60;
+  // If the last shot landed on the same side as the target, scale velocity by sqrt(ratio).
+  // If on the wrong side (e.g., shot went backward), nudge velocity up moderately.
+  let velocity;
+  const sameSide = Math.sign(lastImpactDx) === Math.sign(dx) && Math.abs(lastImpactDx) > 1;
+  if (sameSide) {
+    const ratio = absTargetDx / Math.abs(lastImpactDx);
+    // Range R ∝ v^2, so v_new = v_last * sqrt(ratio). Damp toward 1 a bit so we don't overshoot.
+    const damped = 1 + (Math.sqrt(ratio) - 1) * 0.95;
+    velocity = clampVel(last.velocity * damped);
   } else {
-    const sq = Math.sqrt(disc);
-    // Two solutions: low and high arc. Prefer high arc when terrain peaks between us.
-    const lowTan = (v2 - sq) / (g * x);
-    const highTan = (v2 + sq) / (g * x);
-    const useHigh = memory.preferHighArc === true;
-    const tanTheta = useHigh ? highTan : lowTan;
-    degAngle = Math.atan(tanTheta) * 180 / Math.PI;
+    velocity = clampVel(last.velocity * 1.25);
   }
 
-  // Add noise (shrinks each miss down to noiseFloor).
-  const angle = clampAngle(degAngle + gaussian() * memory.currentNoise);
-  return { angle, velocity: speed };
+  // Add gaussian noise — currentNoise is in velocity units, shrinks each miss.
+  velocity = clampVel(velocity + gaussian() * memory.currentNoise);
+
+  // Angle strategy depends on algorithm.
+  let angle;
+  if (memory.cfg.algorithm === 'physics') {
+    // Solve exact angle for the chosen velocity and target offset.
+    angle = solveAngle(absTargetDx, dy, velocity, memory.preferHighArc);
+    angle = clampAngle(angle + gaussian() * memory.cfg.aimNoise * 0.15);
+  } else {
+    // Keep the previous angle (locked) with small noise — let velocity do the work.
+    const angleJitter = (memory.cfg.aimNoise / 30) * 1.5;
+    angle = clampAngle(last.angle + gaussian() * angleJitter);
+  }
+
+  return { angle, velocity };
 }
 
-// Called after each AI shot so memory can update brackets, noise, and arc preference.
-// shot: { angle, velocity, impactX, impactY, hit }
+// After each shot, update memory. shot: { angle, velocity, impactX, impactY, hit }
 export function recordShotResult(memory, shot, self, enemy) {
   memory.firstShot = false;
+  memory.lastShot = { angle: shot.angle, velocity: shot.velocity, impactX: shot.impactX, impactY: shot.impactY };
 
-  if (shot.hit) {
-    memory.history.push({ ...shot, sign: 0 });
-    return;
-  }
+  if (shot.hit) return;
 
-  // Determine short/long relative to the line from self -> enemy.
-  const targetDx = enemy.x - self.x;
-  const impactDx = shot.impactX - self.x;
-  let sign;
-  if (Math.sign(targetDx) === Math.sign(impactDx)) {
-    sign = Math.abs(impactDx) < Math.abs(targetDx) ? -1 : 1; // short or long
-  } else {
-    sign = -1; // landed behind self -> badly short
-  }
+  // If the shot fell well short of the target (didn't even reach it), suspect terrain blocking
+  // and try the high arc next time.
+  const dx = enemy.x - self.x;
+  const lastImpactDx = shot.impactX - self.x;
+  const wayShort = Math.sign(lastImpactDx) !== Math.sign(dx) || Math.abs(lastImpactDx) < Math.abs(dx) * 0.3;
+  if (wayShort) memory.preferHighArc = true;
 
-  memory.history.push({ ...shot, sign });
-  const recent = memory.history.slice(-memory.cfg.memoryDepth);
-
-  // Bracket update for bracket AIs
-  if (memory.cfg.algorithm === 'bracket') {
-    for (const s of recent) {
-      if (s.sign < 0 && s.velocity > memory.minVel) memory.minVel = s.velocity;
-      if (s.sign > 0 && s.velocity < memory.maxVel) memory.maxVel = s.velocity;
-    }
-    if (memory.minVel >= memory.maxVel) {
-      // Bracket inverted (terrain interference etc.) — widen slightly.
-      memory.minVel = Math.max(INPUT_LIMITS.velMin, memory.minVel - 20);
-      memory.maxVel = Math.min(INPUT_LIMITS.velMax, memory.maxVel + 20);
-    }
-  }
-
-  // If we missed badly short and there's a tall terrain hump in between, prefer high arc next turn.
-  if (sign < 0 && shot.impactX !== undefined) {
-    memory.preferHighArc = true;
-  }
-
-  // Shrink noise toward floor.
+  // Shrink noise toward the floor.
   const next = memory.currentNoise * (1 - memory.cfg.learnRate);
   memory.currentNoise = Math.max(memory.cfg.noiseFloor, next);
 }
 
+// Solve launch angle (degrees, 0..90) for the given velocity and target offset.
+// dxAbs > 0, dyUpPositive: positive if target is ABOVE shooter — but our world has y downward,
+// so callers pass dy as enemy.y - self.y (canvas-y). We flip to up-positive internally.
+function solveAngle(dxAbs, dyCanvas, speed, preferHigh) {
+  const g = PHYSICS.gravity;
+  const yUp = -dyCanvas;
+  const v2 = speed * speed;
+  const disc = v2 * v2 - g * (g * dxAbs * dxAbs + 2 * yUp * v2);
+  if (disc < 0) return 60; // out of range; aim high
+  const sq = Math.sqrt(disc);
+  const lowTan = (v2 - sq) / (g * dxAbs);
+  const highTan = (v2 + sq) / (g * dxAbs);
+  const tanTheta = preferHigh ? highTan : lowTan;
+  return Math.atan(tanTheta) * 180 / Math.PI;
+}
+
 function roughVelocityForRange(absDx, angleDeg) {
-  // Invert range = v^2 * sin(2*theta) / g  (flat ground)
   const a = angleDeg * Math.PI / 180;
   const sin2 = Math.sin(2 * a);
   if (sin2 <= 0.01) return INPUT_LIMITS.velMax;
-  const v = Math.sqrt(absDx * PHYSICS.gravity / sin2);
-  return v;
+  return Math.sqrt(absDx * PHYSICS.gravity / sin2);
 }
 
 function clampAngle(a) {
@@ -139,8 +130,6 @@ function clampAngle(a) {
 function clampVel(v) {
   return Math.max(INPUT_LIMITS.velMin, Math.min(INPUT_LIMITS.velMax, v));
 }
-
-// Box-Muller standard normal.
 function gaussian() {
   let u = 0, v = 0;
   while (u === 0) u = Math.random();

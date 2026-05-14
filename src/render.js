@@ -43,12 +43,51 @@ function drawProjectile(ctx, p) {
 
 function drawExplosion(ctx, ex) {
   if (!ex) return;
-  const t = ex.t / ex.duration;
-  const r = ex.maxR * Math.min(1, t * 1.5);
-  ctx.fillStyle = `rgba(255,${Math.floor(180 - t * 120)},0,${1 - t})`;
+  const t = Math.min(1, ex.t / ex.duration);
+
+  // Expanding shockwave ring (early, then fades)
+  if (t < 0.5) {
+    const st = t / 0.5;
+    const sr = ex.shockR * st;
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,220,140,${(1 - st) * 0.7})`;
+    ctx.lineWidth = 3 * (1 - st) + 1;
+    ctx.beginPath();
+    ctx.arc(ex.x, ex.y, sr, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // White-hot core flash (brief)
+  if (t < 0.25) {
+    const ft = t / 0.25;
+    const fr = ex.flashR * (0.4 + ft * 0.6);
+    ctx.fillStyle = `rgba(255,255,235,${1 - ft})`;
+    ctx.beginPath();
+    ctx.arc(ex.x, ex.y, fr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Fireball: expands then fades to dark smoke
+  const fbT = Math.min(1, t * 1.4);
+  const fbR = ex.carveR * (0.5 + fbT * 1.2);
+  const r = Math.floor(255 - t * 60);
+  const g = Math.floor(180 - t * 150);
+  const b = Math.floor(40 + t * 20);
+  ctx.fillStyle = `rgba(${r},${Math.max(0,g)},${b},${1 - t})`;
   ctx.beginPath();
-  ctx.arc(ex.x, ex.y, r, 0, Math.PI * 2);
+  ctx.arc(ex.x, ex.y, fbR, 0, Math.PI * 2);
   ctx.fill();
+
+  // Debris particles
+  if (ex.particles) {
+    for (const p of ex.particles) {
+      if (p.life <= 0) continue;
+      const alpha = Math.max(0, Math.min(1, p.life));
+      ctx.fillStyle = `rgba(${80 + Math.floor(alpha * 120)},${50 + Math.floor(alpha * 80)},30,${alpha})`;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+  }
 }
 
 function drawVelocityGauge(ctx, state) {
