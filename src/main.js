@@ -1,7 +1,7 @@
 import { CANVAS, TURN } from './config.js';
 import { drawScene } from './render.js';
 import { wireInputs, updateHUD } from './input.js';
-import { createGame, simulate, applyShotResult, animateShot, tickExplosion, checkGameOver, cpuTakeTurn } from './game.js';
+import { createGame, simulate, applyShotResult, animateShot, tickExplosion, tickBackground, checkGameOver, cpuTakeTurn } from './game.js';
 import { playWin, playLose } from './sound.js';
 
 const canvas = document.getElementById('game');
@@ -87,6 +87,7 @@ function frame(now) {
   last = now;
   if (state) {
     tickExplosion(state, dt);
+    tickBackground(state, dt);
     drawScene(ctx, state);
     updateHUD(state);
     if (state.phase === 'GAME_OVER') announceEnd();

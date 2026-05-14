@@ -16,10 +16,22 @@ export function createCannon({ side, color, terrain }) {
 }
 
 export function drawCannon(ctx, cannon) {
-  // base
+  const r = CANNON.radius;
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(cannon.x, cannon.y + 1, r + 3, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // dome
   ctx.fillStyle = cannon.color;
   ctx.beginPath();
-  ctx.arc(cannon.x, cannon.y, CANNON.radius, Math.PI, 2 * Math.PI);
+  ctx.arc(cannon.x, cannon.y, r, Math.PI, 2 * Math.PI);
+  ctx.fill();
+  // top-light highlight
+  ctx.fillStyle = shade(cannon.color, 0.22);
+  ctx.beginPath();
+  ctx.arc(cannon.x, cannon.y, r, Math.PI * 1.1, Math.PI * 1.5);
   ctx.fill();
 
   // barrel
@@ -28,13 +40,33 @@ export function drawCannon(ctx, cannon) {
     : Math.PI + degToRad(cannon.angle);
   const bx = cannon.x + Math.cos(angleRad) * CANNON.barrelLength;
   const by = cannon.y + Math.sin(angleRad) * CANNON.barrelLength;
-  ctx.strokeStyle = cannon.color;
+  // shadow stroke
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cannon.x, cannon.y);
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+  // barrel itself
+  ctx.strokeStyle = shade(cannon.color, -0.18);
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.moveTo(cannon.x, cannon.y);
   ctx.lineTo(bx, by);
   ctx.stroke();
+  ctx.lineCap = 'butt';
 }
+
+function shade(hex, amt) {
+  const c = hex.replace('#', '');
+  const n = parseInt(c, 16);
+  const r = clamp((n >> 16) + Math.round(amt * 255));
+  const g = clamp(((n >> 8) & 0xff) + Math.round(amt * 255));
+  const b = clamp((n & 0xff) + Math.round(amt * 255));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+function clamp(v) { return Math.max(0, Math.min(255, v)); }
 
 export function muzzlePosition(cannon) {
   const angleRad = cannon.side === 'left'

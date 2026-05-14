@@ -104,6 +104,50 @@ export function createTerrain() {
   };
 }
 
+// Decorate the surface with random trees and shrubs. Skips x ranges close to entities
+// (so cannons aren't buried in shrubs).
+export function scatterProps(terrain, skips = []) {
+  const props = [];
+  const step = 22;
+  for (let x = 14; x < terrain.width - 14; x += step + (Math.random() * 18 - 9)) {
+    if (Math.random() < 0.35) continue;
+    if (skips.some(s => Math.abs(s.x - x) < s.r)) continue;
+    const y = terrain.groundY(x);
+    if (y >= terrain.canvasHeight - 4) continue;       // skip if no terrain there
+    const isTree = Math.random() < 0.35;
+    if (isTree) {
+      props.push({
+        type: 'tree', x, y,
+        trunkH: 10 + Math.random() * 8,
+        canopyR: 9 + Math.random() * 6,
+        canopyColor: pickGreen(),
+      });
+    } else {
+      props.push({
+        type: 'shrub', x, y,
+        rx: 6 + Math.random() * 5,
+        ry: 4 + Math.random() * 3,
+        color: pickGreen(),
+      });
+    }
+  }
+  return props;
+}
+
+export function cullPropsNear(props, cx, cy, r) {
+  const r2 = r * r;
+  return props.filter(p => {
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    return dx * dx + dy * dy > r2;
+  });
+}
+
+function pickGreen() {
+  const greens = ['#3e8a3e', '#4ea042', '#356f33', '#5fb050', '#2f6a2c'];
+  return greens[Math.floor(Math.random() * greens.length)];
+}
+
 function paintAllSolid(bctx, solid, w, h) {
   const img = bctx.createImageData(w, h);
   const d = img.data;

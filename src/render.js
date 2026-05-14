@@ -3,24 +3,127 @@ import { drawTerrain } from './terrain.js';
 import { drawCannon, muzzlePosition, launchVelocity } from './cannon.js';
 
 export function clear(ctx) {
-  // sky
+  // Brighter daytime sky
   const grd = ctx.createLinearGradient(0, 0, 0, CANVAS.height);
-  grd.addColorStop(0, '#1d3a6b');
-  grd.addColorStop(1, '#79a8e0');
+  grd.addColorStop(0.0, '#4a82c8');
+  grd.addColorStop(0.55, '#9bc8ee');
+  grd.addColorStop(1.0, '#cfe8fb');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, CANVAS.width, CANVAS.height);
 }
 
 export function drawScene(ctx, state) {
+  // Apply screen shake by translating the world-rendered content.
+  let sx = 0, sy = 0;
+  if (state.shake) {
+    const tt = Math.max(0, 1 - state.shake.t / state.shake.duration);
+    const m = state.shake.magnitude * tt;
+    sx = (Math.random() - 0.5) * 2 * m;
+    sy = (Math.random() - 0.5) * 2 * m;
+  }
+
   clear(ctx);
+  drawBackground(ctx, state);
+
+  ctx.save();
+  ctx.translate(sx, sy);
   drawTerrain(ctx, state.terrain);
+  drawProps(ctx, state.props);
   drawCannon(ctx, state.player);
   drawCannon(ctx, state.cpu);
+  drawSmoke(ctx, state.smoke);
   drawTrail(ctx, state.trail);
   drawProjectile(ctx, state.projectile);
   drawExplosion(ctx, state.explosion);
+  ctx.restore();
+
+  // UI-space overlays (not shaken)
   drawAimIndicator(ctx, state);
   drawVelocityGauge(ctx, state);
+}
+
+function drawBackground(ctx, state) {
+  if (!state.bg) return;
+  drawMountainLayer(ctx, state.bg.farMountains);
+  drawMountainLayer(ctx, state.bg.nearMountains);
+  drawClouds(ctx, state.bg.clouds, state.bgTime || 0);
+}
+
+function drawMountainLayer(ctx, layer) {
+  const { heights, color } = layer;
+  const h = CANVAS.height;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  for (let x = 0; x < heights.length; x++) {
+    ctx.lineTo(x, h - heights[x]);
+  }
+  ctx.lineTo(heights.length, h);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawClouds(ctx, clouds, t) {
+  for (const c of clouds) {
+    let x = c.x + c.speed * t;
+    // wrap
+    const span = CANVAS.width + 200;
+    x = ((x + 100) % span) - 100;
+    const s = c.scale;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    cloudPuff(ctx, x, c.y, s);
+  }
+}
+
+function cloudPuff(ctx, x, y, s) {
+  ctx.beginPath();
+  ctx.ellipse(x,         y,        22 * s, 12 * s, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + 18*s,  y - 4*s,  18 * s, 11 * s, 0, 0, Math.PI * 2);
+  ctx.ellipse(x - 17*s,  y - 2*s,  16 * s, 10 * s, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + 6*s,   y - 9*s,  14 * s, 9 * s,  0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawProps(ctx, props) {
+  if (!props) return;
+  for (const p of props) {
+    if (p.type === 'tree') {
+      // trunk
+      ctx.fillStyle = '#5a3a22';
+      ctx.fillRect(p.x - 1.5, p.y - p.trunkH, 3, p.trunkH);
+      // canopy shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(p.x + 1, p.y - p.trunkH - p.canopyR + 1, p.canopyR, p.canopyR * 0.9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // canopy
+      ctx.fillStyle = p.canopyColor;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - p.trunkH - p.canopyR, p.canopyR, p.canopyR * 0.9, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // shrub
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y - p.ry, p.rx, p.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(p.x + p.rx * 0.4, p.y - p.ry * 0.6, p.rx * 0.4, p.ry * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawSmoke(ctx, smoke) {
+  if (!smoke) return;
+  for (const s of smoke) {
+    const a = Math.max(0, s.life / s.maxLife) * 0.55;
+    ctx.fillStyle = `rgba(120,120,120,${a})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawTrail(ctx, trail) {
