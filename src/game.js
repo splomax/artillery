@@ -65,8 +65,8 @@ export function createGame(difficulty) {
 
 function makeBackground() {
   // Two layers of mountains and a handful of slow-drifting clouds.
-  const farMountains = makeMountainLayer(0.55, 110, 240, '#5f7fa6');
-  const nearMountains = makeMountainLayer(0.9, 160, 320, '#3c5a85');
+  const farMountains  = makeMountainLayer(0.55, 220, 360, '#7191b8');
+  const nearMountains = makeMountainLayer(0.9,  290, 440, '#42648f');
   const clouds = [];
   const cloudCount = 4 + Math.floor(Math.random() * 4);
   for (let i = 0; i < cloudCount; i++) {
@@ -87,10 +87,10 @@ function makeMountainLayer(jagFreq, baseHeight, maxHeight, color) {
   for (let x = 0; x < w; x++) {
     const t = x / w;
     let v = baseHeight;
-    v += 70 * Math.sin(t * Math.PI * 2 * 1.0 * jagFreq + phases[0]);
-    v += 35 * Math.sin(t * Math.PI * 2 * 2.4 * jagFreq + phases[1]);
-    v += 15 * Math.sin(t * Math.PI * 2 * 4.7 * jagFreq + phases[2]);
-    heights[x] = Math.max(baseHeight * 0.4, Math.min(maxHeight, v));
+    v += 100 * Math.sin(t * Math.PI * 2 * 1.0 * jagFreq + phases[0]);
+    v += 55  * Math.sin(t * Math.PI * 2 * 2.4 * jagFreq + phases[1]);
+    v += 25  * Math.sin(t * Math.PI * 2 * 4.7 * jagFreq + phases[2]);
+    heights[x] = Math.max(baseHeight * 0.5, Math.min(maxHeight, v));
   }
   return { heights, color };
 }
